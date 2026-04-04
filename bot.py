@@ -223,25 +223,25 @@ def admin_buttons(call):
         "SELECT username, phrase FROM tasks WHERE id=?",
         (task_id,)
     )
-
     username, phrase = cursor.fetchone()
 
     cursor.execute(
         "SELECT user_id FROM users WHERE username=?",
         (username,)
     )
-
     user = cursor.fetchone()
-
     user_id = user[0] if user else None
 
+    # ===================== APPROVE =====================
     if call.data.startswith("approve_"):
+
+        # 🧹 очищаємо стан
+        waiting_for_reason.pop(call.from_user.id, None)
 
         cursor.execute(
             "UPDATE tasks SET approved=1 WHERE id=?",
             (task_id,)
         )
-
         conn.commit()
 
         if user_id:
@@ -249,21 +249,22 @@ def admin_buttons(call):
                 user_id,
                 f"✅ Фраза прийнята:\n{phrase}"
             )
-
             send_phrase(user_id, username)
 
+    # ===================== REJECT =====================
     elif call.data.startswith("reject_"):
 
         waiting_for_reason[call.from_user.id] = {
-        "task_id": task_id,
-        "user_id": user_id
-    }
+            "task_id": task_id,
+            "user_id": user_id
+        }
 
-    bot.send_message(
-        ADMIN_ID,
+        bot.send_message(
+            ADMIN_ID,
             f"✏️ Напиши причину відхилення:\n{phrase}"
         )
 
+    # ===================== CLEAN BUTTONS =====================
     bot.edit_message_reply_markup(
         call.message.chat.id,
         call.message.message_id,
@@ -272,9 +273,10 @@ def admin_buttons(call):
 
 # ---------------- REJECT REASON ----------------
 
-@bot.message_handler(func=lambda m: m.from_user.id in waiting_for_reason, content_types=["text"])
+@bot.message_handler(content_types=["text"])
 def reject_reason(message):
 
+    # ❗ якщо НЕ в режимі відхилення — ігнор
     if message.from_user.id not in waiting_for_reason:
         return
 
@@ -283,8 +285,8 @@ def reject_reason(message):
     task_id = data["task_id"]
     user_id = data["user_id"]
 
-    # 🔥 одразу видаляємо, щоб не повторювалось
-    del waiting_for_reason[message.from_user.id]
+    # 🧹 чистимо одразу
+    waiting_for_reason.pop(message.from_user.id, None)
 
     cursor.execute(
         "UPDATE tasks SET approved=0 WHERE id=?",
@@ -297,17 +299,6 @@ def reject_reason(message):
         f"❌ Озвучку відхилено\n\nПричина:\n{message.text}\n\n🔄 Запиши ще раз."
     )
 
-    del waiting_for_reason[message.from_user.id]
-
-    conn.commit()
-
-    if user_id:
-        bot.send_message(
-            user_id,
-            f"❌ Озвучку відхилено\n\nПричина:\n{reason}\n\nЗапиши ще раз."
-        )
-
-    del waiting_for_reason[message.from_user.id]
 
 # ---------------- FILE UPLOAD ----------------
 
