@@ -1,3 +1,4 @@
 .env
 uploads/
 voice_tasks.db
+avatar_png/
