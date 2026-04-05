@@ -125,6 +125,10 @@ def start(message):
 @bot.message_handler(content_types=["voice"])
 def voice(message):
 
+    if message.from_user.id in waiting_for_reason:
+        reject_reason(message)
+        return
+
     user_id = message.chat.id
     username = message.from_user.username
 
@@ -232,6 +236,41 @@ def admin_buttons(call):
     user = cursor.fetchone()
     user_id = user[0] if user else None
 
+    # ---------------- CHOOSE REASON TYPE ----------------
+    @bot.callback_query_handler(func=lambda call: call.data.startswith("reason_"))
+    def choose_reason(call):
+
+        
+        bot.answer_callback_query(call.id)
+
+        _, reason_type, task_id = call.data.split("_")
+        task_id = int(task_id)
+
+        cursor.execute(
+            "SELECT username FROM tasks WHERE id=?",
+            (task_id,)
+        )
+        username = cursor.fetchone()[0]
+
+        cursor.execute(
+            "SELECT user_id FROM users WHERE username=?",
+            (username,)
+        )
+        user= cursor.fetchone()
+
+        user_id = user[0] if user else None
+
+        waiting_for_reason[call.from_user.id] = {
+            "task_id" : task_id,
+            "user_id" : user_id,
+            "type" : reason_type
+        }
+
+        if reason_type == "text" :
+            bot.send_message(call.message.chat.id,"Напиши причину:")
+        else :
+            bot.send_message(call.message.chat.id,"Запиши голосове:" )
+
     # ===================== APPROVE =====================
     if call.data.startswith("approve_"):
 
@@ -254,15 +293,27 @@ def admin_buttons(call):
     # ===================== REJECT =====================
     elif call.data.startswith("reject_"):
 
-        waiting_for_reason[call.from_user.id] = {
-            "task_id": task_id,
-            "user_id": user_id
-        }
+     markup = types.InlineKeyboardMarkup()
 
-        bot.send_message(
-            ADMIN_ID,
-            f"✏️ Напиши причину відхилення:\n{phrase}"
-        )
+     markup.add(
+         types.InlineKeyboardButton(
+             "Написати",
+             callback_data=f"reason_text_{task_id}"
+         )
+     )
+     
+     markup.add(
+         types.InlineKeyboardButton(
+             "Голосом",
+             callback_data=f"reason_voice_{task_id}"
+         )
+     )
+
+     bot.send_message(
+         ADMIN_ID,
+         "Як хочеш вказати причину?",
+         reply_markup=markup
+     )
 
     # ===================== CLEAN BUTTONS =====================
     bot.edit_message_reply_markup(
@@ -273,19 +324,18 @@ def admin_buttons(call):
 
 # ---------------- REJECT REASON ----------------
 
-@bot.message_handler(content_types=["text"])
+@bot.message_handler(content_types=["text" , "voice"])
 def reject_reason(message):
 
-    # ❗ якщо НЕ в режимі відхилення — ігнор
-    if message.from_user.id not in waiting_for_reason:
-        return
+    data = waiting_for_reason.get(message.from_user.id)
 
-    data = waiting_for_reason[message.from_user.id]
+    if not data:
+        return
 
     task_id = data["task_id"]
     user_id = data["user_id"]
+    reason_type = data["type"]
 
-    # 🧹 чистимо одразу
     waiting_for_reason.pop(message.from_user.id, None)
 
     cursor.execute(
@@ -294,10 +344,23 @@ def reject_reason(message):
     )
     conn.commit()
 
-    bot.send_message(
-        user_id,
-        f"❌ Озвучку відхилено\n\nПричина:\n{message.text}\n\n🔄 Запиши ще раз."
-    )
+    if reason_type == "text" and message.content_type == "text":
+
+        bot.send_message(
+            user_id,
+            f"❌ Відхилено\n\nПричина:\n{message.text}\n\n🔄 Запиши ще раз"
+        )
+
+    elif reason_type == "voice" and message.content_type == "voice":
+
+        bot.send_message(user_id, "❌ Відхилено\nПричина (голосове):")
+        bot.send_voice(user_id, message.voice.file_id)
+        bot.send_message(user_id, "🔄 Запиши ще раз")
+
+    else:
+        bot.send_message("ADMIN_ID", "❗ Надішли правильний тип (текст або голос)")
+        return
+  
 
 
 # ---------------- FILE UPLOAD ----------------
