@@ -2,3 +2,4 @@
 uploads/
 voice_tasks.db
 avatar_png/
+__pycache__/
