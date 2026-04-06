@@ -97,9 +97,61 @@ def start(message):
     )
     db.conn.commit()
 
-    bot.send_message(user_id, f"👋 Привіт @{username}!")
+    markur = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markur.add("Почати🎤","Статистика📊")
 
-    send_phrase(user_id, username)
+    bot.send_message(
+        user_id, 
+        f"👋 Привіт @{username}!",
+        reply_markup=markur)
+
+# ---------------- User static ----------------
+
+@bot.message_handler(func=lambda m: m.text in ["Почати🎤", "Статистика📊"])
+def handle_message(message):
+    username = message.from_user.username
+    text = message.text
+
+    if text == "Почати🎤":
+        send_phrase(message.chat.id, username)
+
+    elif text == "Статистика📊":
+
+        db.cursor.execute(
+            "SELECT COUNT(*) FROM tasks WHERE username=?",
+            (username,)
+        )
+        total = db.cursor.fetchone()[0]
+
+        db.cursor.execute(
+            "SELECT COUNT(*) FROM tasks WHERE username=? AND approved=1",
+            (username,)
+        )
+        approved = db.cursor.fetchone()[0]
+
+        db.cursor.execute(
+            "SELECT COUNT(*) FROM tasks WHERE username=? AND approved=0",
+            (username,)
+        )
+        rejected = db.cursor.fetchone()[0]
+
+        db.cursor.execute(
+            "SELECT COUNT(*) FROM tasks WHERE username=? AND approved IS NULL",
+            (username,)
+        )
+        pending = db.cursor.fetchone()[0]
+
+        bot.send_message(
+            message.chat.id,
+            f"""📊 Твоя статистика:
+
+🎙 Всього: {total}
+✅ Прийнято: {approved}
+❌ Відхилено: {rejected}
+⏳ Очікує: {pending}
+"""
+        )
+
 
 # ---------------- VOICE ----------------
 
