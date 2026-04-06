@@ -1,6 +1,7 @@
 import telebot
 from telebot import types
 import sqlite3
+import db
 import os
 from dotenv import load_dotenv
 
@@ -12,29 +13,9 @@ ADMIN_ID = int(os.getenv("ADMIN_ID"))
 
 bot = telebot.TeleBot(TOKEN)
 
-# ---------------- DATABASE ----------------
+db.init_db()
 
-conn = sqlite3.connect("voice_tasks.db", check_same_thread=False)
-cursor = conn.cursor()
 
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS users(
-username TEXT PRIMARY KEY,
-user_id INTEGER
-)
-""")
-
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS tasks(
-id INTEGER PRIMARY KEY AUTOINCREMENT,
-username TEXT,
-phrase TEXT,
-voice_id TEXT,
-approved INTEGER
-)
-""")
-
-conn.commit()
 
 # ---------------- STATES ----------------
 
@@ -78,12 +59,12 @@ def parse_task_file(filepath):
 
 def send_phrase(user_id, username):
 
-    cursor.execute(
+    db.cursor.execute(
         "SELECT id, phrase FROM tasks WHERE username=? AND approved IS NULL",
         (username,)
     )
 
-    tasks = cursor.fetchall()
+    tasks = db.cursor.fetchall()
 
     if not tasks:
         bot.send_message(user_id, "✅ Усі фрази виконані!")
@@ -110,11 +91,11 @@ def start(message):
         bot.send_message(user_id, "⚠️ У тебе немає username.")
         return
 
-    cursor.execute(
+    db.cursor.execute(
         "INSERT OR REPLACE INTO users(username,user_id) VALUES(?,?)",
         (username, user_id)
     )
-    conn.commit()
+    db.conn.commit()
 
     bot.send_message(user_id, f"👋 Привіт @{username}!")
 
@@ -138,11 +119,11 @@ def voice(message):
 
     task_id = user_states[user_id]
 
-    cursor.execute(
+    db.cursor.execute(
         "UPDATE tasks SET voice_id=? WHERE id=?",
         (message.voice.file_id, task_id)
     )
-    conn.commit()
+    db.conn.commit()
 
     markup = types.InlineKeyboardMarkup()
 
@@ -177,12 +158,12 @@ def user_buttons(call):
         bot.send_message(call.message.chat.id, "🔄 Запиши голос ще раз.")
         return
 
-    cursor.execute(
+    db.cursor.execute(
         "SELECT username, phrase, voice_id FROM tasks WHERE id=?",
         (task_id,)
     )
 
-    username, phrase, voice_id = cursor.fetchone()
+    username, phrase, voice_id = db.cursor.fetchone()
 
     markup = types.InlineKeyboardMarkup()
 
@@ -223,17 +204,17 @@ def admin_buttons(call):
 
     task_id = int(call.data.split("_")[1])
 
-    cursor.execute(
+    db.cursor.execute(
         "SELECT username, phrase FROM tasks WHERE id=?",
         (task_id,)
     )
-    username, phrase = cursor.fetchone()
+    username, phrase = db.cursor.fetchone()
 
-    cursor.execute(
+    db.cursor.execute(
         "SELECT user_id FROM users WHERE username=?",
         (username,)
     )
-    user = cursor.fetchone()
+    user = db.cursor.fetchone()
     user_id = user[0] if user else None
 
     # ---------------- CHOOSE REASON TYPE ----------------
@@ -246,17 +227,17 @@ def admin_buttons(call):
         _, reason_type, task_id = call.data.split("_")
         task_id = int(task_id)
 
-        cursor.execute(
+        db.cursor.execute(
             "SELECT username FROM tasks WHERE id=?",
             (task_id,)
         )
-        username = cursor.fetchone()[0]
+        username = db.cursor.fetchone()[0]
 
-        cursor.execute(
+        db.cursor.execute(
             "SELECT user_id FROM users WHERE username=?",
             (username,)
         )
-        user= cursor.fetchone()
+        user= db.cursor.fetchone()
 
         user_id = user[0] if user else None
 
@@ -277,11 +258,11 @@ def admin_buttons(call):
         # 🧹 очищаємо стан
         waiting_for_reason.pop(call.from_user.id, None)
 
-        cursor.execute(
+        db.cursor.execute(
             "UPDATE tasks SET approved=1 WHERE id=?",
             (task_id,)
         )
-        conn.commit()
+        db.conn.commit()
 
         if user_id:
             bot.send_message(
@@ -338,11 +319,11 @@ def reject_reason(message):
 
     waiting_for_reason.pop(message.from_user.id, None)
 
-    cursor.execute(
+    db.cursor.execute(
         "UPDATE tasks SET approved=0 WHERE id=?",
         (task_id,)
     )
-    conn.commit()
+    db.conn.commit()
 
     if reason_type == "text" and message.content_type == "text":
 
@@ -388,19 +369,19 @@ def upload_file(message):
 
         for phrase in phrases:
 
-            cursor.execute(
+            db.cursor.execute(
                 "INSERT INTO tasks(username,phrase,voice_id,approved) VALUES(?,?,?,NULL)",
                 (username, phrase, None)
             )
 
-        conn.commit()
+        db.conn.commit()
 
-        cursor.execute(
+        db.cursor.execute(
             "SELECT user_id FROM users WHERE username=?",
             (username,)
         )
 
-        user = cursor.fetchone()
+        user = db.cursor.fetchone()
 
         if user:
             bot.send_message(
