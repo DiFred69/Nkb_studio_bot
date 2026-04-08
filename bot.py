@@ -99,6 +99,7 @@ def start(message):
 
     markur = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markur.add("Почати🎤","Статистика📊")
+    markur.add("Прогрес")
 
     bot.send_message(
         user_id, 
@@ -151,6 +152,43 @@ def handle_message(message):
 ⏳ Очікує: {pending}
 """
         )
+
+# ---------------- User progress ----------------
+
+@bot.message_handler(func=lambda m: m.text == "Прогрес")
+def progress(message):
+
+    username = message.from_user.username
+
+    db.cursor.execute(
+         "SELECT COUNT(*) FROM tasks WHERE username=?",
+         (username,)
+    )
+    total = db.cursor.fetchone()[0]
+
+    db.cursor.execute(
+        "SELECT COUNT(*) FROM tasks WHERE username=? AND approved=1",
+        (username,)
+    )
+
+    approved = db.cursor.fetchone()[0]
+
+    progress = int((approved / total) * 100) if total > 0 else 0
+
+    bar = "🟩" * (progress // 10) + "⬜" * (10 - progress // 10)
+
+    bot.send_message(
+        message.chat.id,
+        f"""📈 Твій прогрес:
+
+{bar} {progress}%
+
+✅ Виконано: {approved}
+🎙 Всього: {total}
+"""
+    )
+
+
 
 
 # ---------------- VOICE ----------------
