@@ -22,9 +22,11 @@
 
 Тепер юзер може бачити свій прогрес в озвучці 
 
-![pic3]()
+![pic3](https://raw.githubusercontent.com/DiFred69/Nkb_studio_bot/main/picRD/2.jpg)
 
-![pic4]()
+
+
+![pic4](https://raw.githubusercontent.com/DiFred69/Nkb_studio_bot/main/picRD/5.jpg)
 
 
 ### Картинка бота :feelsgood: 
